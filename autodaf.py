@@ -23,18 +23,14 @@ class FBAutoDaftarReq:
         self.current_number = ""
         self.session = requests.Session()
         
-        # 🔥 GABUNGAN MAUT: USER-AGENT FB LITE + DOMAIN LIMITED 🔥
-        ua_termux = "Mozilla/5.0 (Linux; Android 11; RMX3231 Build/RP1A.201005.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/103.0.5060.129 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/377.0.0.22.107;]"
+        # 🔥 USER-AGENT OPERA MINI 🔥
+        # Ini memaksa FB memberikan tampilan HTML jadul tanpa redirect ke Aplikasi/Deep Link
+        ua_opera = "Opera/9.80 (Android; Opera Mini/76.0.2254/85. U; en) Presto/2.12.423 Version/12.16"
         
         self.session.headers.update({
-            "User-Agent": ua_termux,
+            "User-Agent": ua_opera,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1",
             "Origin": "https://limited.facebook.com",
             "Referer": "https://limited.facebook.com/"
         })
@@ -97,7 +93,7 @@ class FBAutoDaftarReq:
                 break
                 
         if not form:
-            form = soup.find('form') # Ambil form pertama jika tidak ada ciri khas
+            form = soup.find('form')
 
         if not form:
             self.log("⚠️ Form pendaftaran tidak ditemukan. Mungkin IP terkena limit/blokir awal.")
@@ -190,7 +186,7 @@ class FBAutoDaftarReq:
 
 def main():
     print("========================================")
-    print(" 🤖 BOT FB DAFTAR (TERMUX STYLE - LIMITED FB) ")
+    print(" 🤖 BOT FB DAFTAR (OPERA MINI + LIMITED FB) ")
     print("========================================")
     
     target_range = input("[?] Masukkan Range API: ").strip()
