@@ -2,7 +2,6 @@ import requests
 import time
 from bs4 import BeautifulSoup
 import random
-import sys
 
 # ==========================================
 # KONFIGURASI API & DATA
@@ -23,23 +22,22 @@ class FBAutoDaftarReq:
         self.current_number = ""
         self.session = requests.Session()
         
-        # 🔥 USER-AGENT OPERA MINI 🔥
-        # Ini memaksa FB memberikan tampilan HTML jadul tanpa redirect ke Aplikasi/Deep Link
-        ua_opera = "Opera/9.80 (Android; Opera Mini/76.0.2254/85. U; en) Presto/2.12.423 Version/12.16"
+        # User-Agent Chrome Android Ringan (Paling Standar)
+        self.ua = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
         
         self.session.headers.update({
-            "User-Agent": ua_opera,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Origin": "https://limited.facebook.com",
-            "Referer": "https://limited.facebook.com/"
+            "User-Agent": self.ua,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
         })
 
     def log(self, text):
         print(f"[BOT] {text}")
 
     def get_number(self):
-        self.log(f"⏳ Mengambil nomor dari API (Range: {self.target_range})...")
+        self.log(f"⏳ Mengambil nomor API...")
         url = f"{SERVER_BASE}/mnit/getnum"
         payload = {"range": self.target_range, "is_national": False, "remove_plus": False}
         headers = {"Content-Type": "application/json", "token": TOKEN_CLIENT}
@@ -47,165 +45,94 @@ class FBAutoDaftarReq:
             resp = requests.post(url, json=payload, headers=headers).json()
             if resp.get("meta", {}).get("code") == 200:
                 self.current_number = resp["data"].get("copy", resp["data"].get("number"))
-                self.log(f"✅ Nomor didapat: {self.current_number}")
+                self.log(f"✅ Nomor: {self.current_number}")
                 return True
         except: pass
-        self.log("❌ Gagal Get Number dari API.")
         return False
 
-    def wait_for_otp(self):
-        self.log(f"🔄 Menunggu OTP masuk untuk {self.current_number} (Maks 3 menit)...")
-        url = f"{SERVER_BASE}/mnit/numsuccess?number={self.current_number}"
-        headers = {"x-client-secret": TOKEN_CLIENT}
-        
-        for _ in range(36):
-            try:
-                resp = requests.get(url, headers=headers).json()
-                if resp.get("ok") and resp.get("found"):
-                    item = resp.get("otp_item", {})
-                    otp_text = str(item.get("otp") or item.get("otp_code") or item.get("code") or "").strip()
-                    if otp_text:
-                        self.log(f"🎉 OTP DITEMUKAN DI API: {otp_text}")
-                        return otp_text
-            except: pass
-            time.sleep(5)
-        self.log("⌛ Waktu habis. OTP tidak masuk.")
-        return None
-
     def run_flow(self):
-        self.session.proxies.clear()
-        self.log("Membuka limited.facebook.com/reg (Proxy OFF)...")
-        
+        # STEP 1: Kunjungi Home dulu untuk dapat Cookies Dasar
+        self.log("Membuka halaman utama limited.facebook.com...")
         try:
-            res = self.session.get("https://limited.facebook.com/reg", timeout=15)
-            soup = BeautifulSoup(res.text, 'html.parser')
-            page_title = soup.title.text if soup.title else "Tanpa Judul"
-            self.log(f"Halaman terbuka: {page_title}")
-        except Exception as e:
-            self.log(f"❌ Gagal membuka web FB: {e}")
-            return
-
-        # Cari form pendaftaran
-        form = None
-        for f in soup.find_all('form'):
-            if f.get('action') and ('/reg' in f.get('action') or 'submit' in res.text.lower()):
-                form = f
-                break
-                
-        if not form:
-            form = soup.find('form')
-
-        if not form:
-            self.log("⚠️ Form pendaftaran tidak ditemukan. Mungkin IP terkena limit/blokir awal.")
-            return
+            r1 = self.session.get("https://limited.facebook.com/", timeout=15)
+            # Kadang FB minta klik 'Create New Account' dulu
+            if "/reg/" in r1.text:
+                url_reg = "https://limited.facebook.com/reg/"
+            else:
+                url_reg = "https://limited.facebook.com/reg/"
             
-        action_url = form.get('action')
-        if not action_url.startswith("http"):
-            action_url = "https://limited.facebook.com" + action_url
+            time.sleep(2)
+            res = self.session.get(url_reg, timeout=15)
+            soup = BeautifulSoup(res.text, 'html.parser')
+        except Exception as e:
+            self.log(f"❌ Koneksi Error: {e}")
+            return
 
-        # Ambil Token Keamanan (lsd, jazoest, dll)
+        # STEP 2: Cari Form & Payload
+        form = soup.find("form")
+        if not form:
+            self.log("⚠️ Form masih tidak ketemu!")
+            # DEBUG: Simpan halaman ke file untuk dicek manual
+            with open("debug_fb.html", "w", encoding="utf-8") as f:
+                f.write(res.text)
+            self.log("💡 Cek file 'debug_fb.html' di folder kamu untuk lihat apa yang muncul.")
+            return
+
+        action = form.get("action")
+        if not action.startswith("http"):
+            action = "https://limited.facebook.com" + action
+
         payload = {}
         for inp in form.find_all("input"):
-            name = inp.get("name")
-            value = inp.get("value", "")
-            if name: payload[name] = value
-
-        if "lsd" not in payload:
-            self.log("⚠️ Token (lsd) tidak ditemukan di form ini!")
-            return
+            n, v = inp.get("name"), inp.get("value", "")
+            if n: payload[n] = v
 
         if not self.get_number(): return
 
-        is_female = random.choice([True, False]) 
-        first_name = random.choice(FEMALE_FIRST) if is_female else random.choice(MALE_FIRST)
-        last_name = random.choice(LAST_NAMES)
+        # STEP 3: Isi Data
+        is_female = random.choice([True, False])
+        fname = random.choice(FEMALE_FIRST if is_female else MALE_FIRST)
+        lname = random.choice(LAST_NAMES)
         
-        payload['firstname'] = first_name
-        payload['lastname'] = last_name
-        payload['reg_email__'] = self.current_number
-        payload['sex'] = '1' if is_female else '2' 
-        payload['reg_passwd__'] = DEFAULT_PW
-        payload['birthday_day'] = str(random.randint(1, 28))
-        payload['birthday_month'] = str(random.randint(1, 12))
-        payload['birthday_year'] = str(random.randint(1990, 2003))
-        
-        if 'submit' in payload: del payload['submit']
-        payload['submit'] = 'Sign Up'
+        payload.update({
+            'firstname': fname,
+            'lastname': lname,
+            'reg_email__': self.current_number,
+            'sex': '1' if is_female else '2',
+            'reg_passwd__': DEFAULT_PW,
+            'birthday_day': str(random.randint(1, 28)),
+            'birthday_month': str(random.randint(1, 12)),
+            'birthday_year': str(random.randint(1992, 2004)),
+            'submit': 'Sign Up'
+        })
 
-        self.log(f"✅ Data siap: {first_name} {last_name} | {self.current_number}")
-        time.sleep(2)
-
-        # ===============================================
-        # NYALAKAN PROXY SAAT KLIK DAFTAR
-        # ===============================================
+        # STEP 4: Submit dengan Proxy (jika ada)
         if self.use_proxy and self.proxy_str:
-            self.log(f"🌐 MENGAKTIFKAN PROXY...")
-            self.session.proxies = {
-                "http": f"http://{self.proxy_str}",
-                "https": f"http://{self.proxy_str}"
-            }
+            self.session.proxies = {"http": f"http://{self.proxy_str}", "https": f"http://{self.proxy_str}"}
+            self.log("🌐 Proxy Aktif...")
 
-        self.log("🚀 MENGIRIM DATA PENDAFTARAN...")
+        self.log(f"🚀 Mendaftar sebagai {fname} {lname}...")
         try:
-            post_res = self.session.post(action_url, data=payload, timeout=20)
+            p_res = self.session.post(action, data=payload, timeout=20)
             self.session.proxies.clear()
-            self.log("✅ Data terkirim. (Proxy OFF)")
             
-            # Cek respon FB setelah submit
-            soup_post = BeautifulSoup(post_res.text, 'html.parser')
-            post_title = soup_post.title.text if soup_post.title else "Tanpa Judul"
-            self.log(f"Respon FB Setelah Daftar: {post_title}")
-            
+            # Cek hasil
+            if "checkpoint" in p_res.url or "confirm" in p_res.url:
+                self.log("✅ Berhasil masuk ke halaman Konfirmasi/OTP!")
+            else:
+                self.log(f"❓ Status Terakhir: {p_res.url}")
         except Exception as e:
-            self.log(f"❌ Error kirim data: {e}")
-            return
-
-        otp_api = self.wait_for_otp()
-        if not otp_api: return
-
-        print("\n" + "="*40)
-        manual_otp = input(f"👉 MASUKKAN KODE OTP SECARA MANUAL: ").strip()
-        print("="*40 + "\n")
-
-        # Refresh & Ambil Cookies
-        self.log("🔄 Merefresh ke halaman utama (limited.facebook.com)...")
-        try:
-            self.session.get("https://limited.facebook.com/")
-        except: pass
-        
-        raw_cookies = self.session.cookies.get_dict()
-        cookies_str = "; ".join([f"{k}={v}" for k, v in raw_cookies.items()])
-        user_id = raw_cookies.get("c_user", "GAGAL / CHECKPOINT")
-
-        print("\n" + "★"*40)
-        print("🎉 HASIL EKSEKUSI AKUN 🎉")
-        print(f"UID      : {user_id}")
-        print(f"Password : {DEFAULT_PW}")
-        print(f"Cookies  :\n{cookies_str}")
-        print("★"*40 + "\n")
+            self.log(f"❌ Post Error: {e}")
 
 def main():
-    print("========================================")
-    print(" 🤖 BOT FB DAFTAR (OPERA MINI + LIMITED FB) ")
-    print("========================================")
-    
-    target_range = input("[?] Masukkan Range API: ").strip()
-    tanya_proxy = input("[?] Pakai Proxy saat klik daftar? (y/n): ").strip().lower()
-    use_proxy = (tanya_proxy == 'y')
-    
-    proxy_str = ""
-    if use_proxy:
-        proxy_str = input("[?] Masukkan Proxy (user:pass@ip:port): ").strip()
+    target_range = input("[?] Range API: ").strip()
+    use_p = input("[?] Pakai Proxy? (y/n): ").lower() == 'y'
+    p_str = input("[?] Proxy: ").strip() if use_p else ""
 
     while True:
-        bot = FBAutoDaftarReq(target_range, proxy_str, use_proxy)
+        bot = FBAutoDaftarReq(target_range, p_str, use_p)
         bot.run_flow()
-        
-        print("\n[INFO] Siklus selesai.")
-        lanjut = input("👉 Ketik 'q' lalu Enter untuk memulai loop baru (atau tombol lain untuk berhenti): ").strip().lower()
-        if lanjut != 'q':
-            print("🛑 Bot dihentikan.")
-            break
+        if input("\nLanjut? (q=exit): ").lower() == 'q': break
 
 if __name__ == "__main__":
     main()
