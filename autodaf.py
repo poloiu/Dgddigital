@@ -7,7 +7,7 @@ import sys
 # ==========================================
 # KONFIGURASI API
 # ==========================================
-SERVER_BASE = "http://64.176.82.110:3000"
+SERVER_BASE = "https://charms-men-webmaster-mortality.trycloudflare.com"
 TOKEN_CLIENT = "CHANGE_ME_CLIENT_123"
 
 class FBAutoDaftarReq:
@@ -74,7 +74,7 @@ class FBAutoDaftarReq:
         # 1. Buka halaman registrasi mbasic
         self.log("Membuka mbasic.facebook.com/reg ...")
         try:
-            res = self.session.get("https://mbasic.facebook.com/reg")
+            res = self.session.get("https://limited.facebook.com/reg")
             soup = BeautifulSoup(res.text, 'html.parser')
         except Exception as e:
             self.log(f"❌ Gagal membuka web FB: {e}")
@@ -110,7 +110,7 @@ class FBAutoDaftarReq:
 
         # 4. Refresh & Ambil Cookies
         self.log("🔄 Merefresh ke halaman utama...")
-        self.session.get("https://mbasic.facebook.com/")
+        self.session.get("https://m.facebook.com/")
         
         raw_cookies = self.session.cookies.get_dict()
         cookies_str = "; ".join([f"{k}={v}" for k, v in raw_cookies.items()])
